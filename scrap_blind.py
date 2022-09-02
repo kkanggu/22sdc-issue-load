@@ -6,75 +6,82 @@ import asyncio
 from bs4 import BeautifulSoup as bs
 import requests
 
-
+#any csv file that named test.csv is ok should update...
 CSV_PATH = "./test.csv"
+#add your user agent 
 headers = ''
 
 
-def get_article_info_links(csv_article_codes):
+def get_article_info_urls(exist_article_codes):
     """
-    Sends get request to blind and gets valid links of articles.
-    Filter valid links by checking data is already in csv file.
+    Sends get request to blind and gets valid urls of articles.
+    Filter valid urls by checking data is already in csv file.
     
     Args:
-        file_links(list): links saved in file
+        exist_article_codes(list): article codes already exist in main csv file
     
     Return:
-        list: links of valid articles, not exist in csv file
+        list: urls of valid articles, not exist in csv file
     """
-
-    url = "https://www.teamblind.com/kr/topics/%EB%B8%94%EB%9D%BC%EB%B8%94%EB%9D%BC"
+    try:
+        url = "https://www.teamblind.com/kr/topics/%EB%B8%94%EB%9D%BC%EB%B8%94%EB%9D%BC"
+        resp = requests.get(url, headers=headers)
+        assert resp.status_code == 200, "Requset Failed"
     
-    resp = requests.get(url, headers=headers)
-    soup = bs(resp.text, 'html.parser')
-    hrefs = [a['href'] for a in soup.select('.article-list-pre .category > a') if a.has_attr('href')]
+        soup = bs(resp.text, 'html.parser')
+        hrefs = [a['href'] for a in soup.select('.article-list-pre .category > a') if a.has_attr('href')]
     
-    #article codes saved in csv file already
-    article_codes = [href.split("-")[-1] for href in hrefs]
+        #article codes saved in csv file already
+        article_codes = [href.split("-")[-1] for href in hrefs]
     
-    #article links to update
-    valid_links = [href for href, code in zip(hrefs, article_codes) if code not in csv_article_codes]
-    return valid_links
+        #article urls to update
+        valid_urls = [href for href, code in zip(hrefs, article_codes) if code not in exist_article_codes]
+        return valid_urls
+    
+    except Exception as e:
+        print(">> Error occured in get article urls")
+        print(e)
 
 
-async def get_all_aritcle(links):
+async def get_all_aritcle(article_urls):
     """
-    Sends requests to each article link and get information of each articles.
+    Sends requests to each article url and get information of each articles.
     
     Args:
-        links (list): links of valid article
+        article_urls (list): urls of valid article
     
     Return:
         infos(list): list of info dictionaries
-        {date:"2022-08-01-07:00", "name": "한샘", title:"블라보면 징징이가 왜이리 많은지", content:"9급이나 대기업이나. 걍 하면 되는거지 꼭 물고 뜯고 뒤지게 싸우는지 왜", "url":"https://..."},
-        {date:"2022-09-01-07:00", "name": "공무원", title:"번개하실분", content:"성수동 번개 구합니다.", "url":"https://..."}, ...
-        ]
     """
     
     #blind base url
     base_url = "https://www.teamblind.com"
     #create tasks to async job
-    tasks = [asyncio.create_task(get_article_info(base_url + l)) for l in links]
+    tasks = [asyncio.create_task(get_article_info(base_url + l)) for l in article_urls]
     infos = await asyncio.gather(*tasks)
     return infos
 
 
-async def get_article_info(link):
+async def get_article_info(article_url):
     """
     Return info of one article
     Run formatting function to change data format.
     Create information dictionary of article.
 
     Args:
-        link (str): url of article
+        article_url (str): url of article
 
     Returns:
-        dictionary: {date:"2022-08-01-07:00", "name": "한샘", title:"블라보면 징징이가 왜이리 많은지", content:"9급이나 대기업이나. 걍 하면 되는거지 꼭 물고 뜯고 뒤지게 싸우는지 왜", "url":"https://..."},
+        dictionary: 
+            {
+                date:"2022-08-01-07:00", "name": "한샘", title:"블라보면 징징이가 왜이리 많은지",
+                content:"9급이나 대기업이나. 걍 하면 되는거지 꼭 물고 뜯고 뒤지게 싸우는지 왜", "url":"https://..."
+            }
     """
 
     try:
         async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(link) as resp:
+            async with session.get(article_url) as resp:
                 assert resp.status == 200, "Requset Failed" #if reponse has error then occur exception
                 html_text = await resp.text()
                 #get parsed data of html text
@@ -82,14 +89,15 @@ async def get_article_info(link):
                 
                 #convert date format to yyyy-mm-dd hh-MM
                 foramtted_date = convert_date_format(date)
-                
-                keys = ["date","name", "title", "content", "url"]
-                values = [foramtted_date, name, title, content, link]
+                article_code = article_url.split("-")[-1]
+
+                keys = ["article_code", "date","name", "title", "content", "url"]
+                values = [article_code, foramtted_date, name, title, content, article_url]
                 info = {k:v for k, v in zip(keys, values)}
                 return info
     
     except Exception as e:
-        print(">> Error occured in url")
+        print(">> Error occured in get article info")
         print(resp.url)
         print(e)
 
@@ -136,7 +144,7 @@ def convert_date_format(raw_date):
     
     except Exception as e:
         print(">> Convert date has problem")
-        print(f"amonut :{time_amount} unit: {time_unit}")
+        print(f"raw_date: {raw_date} ,amonut :{time_amount} unit: {time_unit}")
         print(e)
 
 
@@ -187,6 +195,8 @@ def update_csv(file, infos):
         file (file): main csv file to append new infos
         infos(list): new informations from new articles
     """
+    writer = csv.DictWriter(file, fieldnames=infos[0].keys())
+    writer.writerows(infos)
     return
 
 
@@ -196,13 +206,14 @@ async def run():
     """
 
     #Run each 10 
-    with open(CSV_PATH, mode="r+") as csv_file:
+    with open(CSV_PATH, mode="a+", newline='') as csv_file:
         reader = csv.DictReader(csv_file)
-        csv_article_codes = set([r['date'] for r in reader])
-        links = get_article_info_links(csv_article_codes)
-        infos = await get_all_aritcle(links[:3])
+        #should change as article code
+        exist_article_codes = set([r['article_code'] for r in reader])
+        urls = get_article_info_urls(exist_article_codes)
+        infos = await get_all_aritcle(urls)
         print(infos)
-        # update_csv(file)
+        update_csv(csv_file, infos)
 
 
 if __name__ == '__main__':
