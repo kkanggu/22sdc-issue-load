@@ -5,14 +5,9 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup as bs
 import requests
+import crawl_logger
 
-#any csv file that named test.csv is ok should update...
-CSV_PATH = "./test.csv"
-#add your user agent 
-headers = ''
-
-
-def get_article_info_urls(exist_article_codes):
+def get_article_info_urls(exist_article_codes, board_name):
     """
     Sends get request to blind and gets valid urls of articles.
     Filter valid urls by checking data is already in csv file.
@@ -24,7 +19,7 @@ def get_article_info_urls(exist_article_codes):
         list: urls of valid articles, not exist in csv file
     """
     try:
-        url = "https://www.teamblind.com/kr/topics/%EB%B8%94%EB%9D%BC%EB%B8%94%EB%9D%BC"
+        url = f"{base_url}/kr/topics/{board_name}"
         resp = requests.get(url, headers=headers)
         assert resp.status_code == 200, "Requset Failed"
     
@@ -39,8 +34,7 @@ def get_article_info_urls(exist_article_codes):
         return valid_urls
     
     except Exception as e:
-        print(">> Error occured in get article urls")
-        print(e)
+        logger.error(e)
 
 
 async def get_all_aritcle(article_urls):
@@ -54,8 +48,7 @@ async def get_all_aritcle(article_urls):
         infos(list): list of info dictionaries
     """
     
-    #blind base url
-    base_url = "https://www.teamblind.com"
+
     #create tasks to async job
     tasks = [asyncio.create_task(get_article_info(base_url + l)) for l in article_urls]
     infos = await asyncio.gather(*tasks)
@@ -96,10 +89,9 @@ async def get_article_info(article_url):
                 info = {k:v for k, v in zip(keys, values)}
                 return info
     
+
     except Exception as e:
-        print(">> Error occured in get article info")
-        print(resp.url)
-        print(e)
+        logger.warning(e)
 
 
 def convert_date_format(raw_date):
@@ -143,9 +135,8 @@ def convert_date_format(raw_date):
         return date
     
     except Exception as e:
-        print(">> Convert date has problem")
-        print(f"raw_date: {raw_date} ,amonut :{time_amount} unit: {time_unit}")
-        print(e)
+        # logger.warning(f"raw_date: {raw_date} ,amonut :{time_amount} unit: {time_unit}")
+        logger.warning(e)
 
 
 def parse_article_info(html_text):
@@ -179,12 +170,8 @@ def parse_article_info(html_text):
         return parsing_data
     
     except Exception as e:
-        print(">> Error in parse article")
-        print(title)
-        print(date)
-        print(name)
-        print(content)
-        print(e)
+        # logger.warning(title, date, name, content)
+        logger.warning(e)
 
 
 def update_csv(file, infos):
@@ -195,6 +182,7 @@ def update_csv(file, infos):
         file (file): main csv file to append new infos
         infos(list): new informations from new articles
     """
+    #needed to sort dict by datetime
     writer = csv.DictWriter(file, fieldnames=infos[0].keys())
     writer.writerows(infos)
     return
@@ -207,14 +195,24 @@ async def run():
 
     #Run each 10 
     with open(CSV_PATH, mode="a+", newline='') as csv_file:
+        #create logger
         reader = csv.DictReader(csv_file)
         #should change as article code
         exist_article_codes = set([r['article_code'] for r in reader])
-        urls = get_article_info_urls(exist_article_codes)
+        board_name = requests.utils.quote("자동차")
+        urls = get_article_info_urls(exist_article_codes, board_name)
         infos = await get_all_aritcle(urls)
-        print(infos)
         update_csv(csv_file, infos)
 
 
 if __name__ == '__main__':
+    #any csv file that named test.csv is ok should update...
+    CSV_PATH = "./test.csv"
+    #add your user agent 
+    headers = ''
+
+    #blind base url
+    base_url = "https://www.teamblind.com"
+
+    logger = crawl_logger.create_logger()
     asyncio.run(run())
