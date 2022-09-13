@@ -1,13 +1,13 @@
-import csv
-import datetime
-import re
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup as bs
+import datetime
+import json
+import re
 import requests
-import crawl_logger
+import my_logger
 
-def get_article_info_urls(exist_article_codes, board_name):
+def get_article_info_urls(board_name):
     """
     Sends get request to blind and gets valid urls of articles.
     Filter valid urls by checking data is already in csv file.
@@ -25,13 +25,7 @@ def get_article_info_urls(exist_article_codes, board_name):
     
         soup = bs(resp.text, 'html.parser')
         hrefs = [a['href'] for a in soup.select('.article-list-pre .category > a') if a.has_attr('href')]
-    
-        #article codes saved in csv file already
-        article_codes = [href.split("-")[-1] for href in hrefs]
-    
-        #article urls to update
-        valid_urls = [href for href, code in zip(hrefs, article_codes) if code not in exist_article_codes]
-        return valid_urls
+        return hrefs
     
     except Exception as e:
         logger.error(e)
@@ -48,10 +42,10 @@ async def get_all_aritcle(article_urls):
         infos(list): list of info dictionaries
     """
     
-
     #create tasks to async job
     tasks = [asyncio.create_task(get_article_info(base_url + l)) for l in article_urls]
     infos = await asyncio.gather(*tasks)
+    print(f"article counts: {len(infos)}")
     return infos
 
 
@@ -166,6 +160,7 @@ def parse_article_info(html_text):
         decompose_tags(date.find("i"))
         decompose_tags(title.find("a"))
         decompose_tags(content.find("br"))
+
         parsing_data = [d.get_text() for d in [date, name, title, content]]
         return parsing_data
     
@@ -174,17 +169,11 @@ def parse_article_info(html_text):
         logger.warning(e)
 
 
-def update_csv(file, infos):
-    """
-    Append new article inforamations to main csv. 
-
-    Args:
-        file (file): main csv file to append new infos
-        infos(list): new informations from new articles
-    """
-    #needed to sort dict by datetime
-    writer = csv.DictWriter(file, fieldnames=infos[0].keys())
-    writer.writerows(infos)
+def create_json(infos):
+    now = datetime.datetime.now()
+    file_name = JSON_PATH + datetime.datetime.strftime(now, "%Y-%m-%d %H:%M") + ".json"
+    with open(file_name, "w") as json_:
+        json.dump(infos, json_, indent=4)
     return
 
 
@@ -193,26 +182,22 @@ async def run():
     Run scrapping each 10 minutes.
     """
 
-    #Run each 10 
-    with open(CSV_PATH, mode="a+", newline='') as csv_file:
-        #create logger
-        reader = csv.DictReader(csv_file)
-        #should change as article code
-        exist_article_codes = set([r['article_code'] for r in reader])
-        board_name = requests.utils.quote("자동차")
-        urls = get_article_info_urls(exist_article_codes, board_name)
-        infos = await get_all_aritcle(urls)
-        update_csv(csv_file, infos)
+    #should change as article code
+    board_name = "자동차"
+    encoded_board_name = requests.utils.quote(board_name)
+    urls = get_article_info_urls(encoded_board_name)
+    infos = await get_all_aritcle(urls)
+    create_json(infos)
+    # update_csv(csv_file, infos)
 
 
 if __name__ == '__main__':
-    #any csv file that named test.csv is ok should update...
-    CSV_PATH = "./test.csv"
+    JSON_PATH = "./json/"
     #add your user agent 
     headers = ''
 
     #blind base url
     base_url = "https://www.teamblind.com"
 
-    logger = crawl_logger.create_logger()
+    logger = my_logger.create_logger()
     asyncio.run(run())
