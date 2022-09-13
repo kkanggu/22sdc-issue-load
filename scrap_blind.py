@@ -6,26 +6,44 @@ import json
 import re
 import requests
 import my_logger
+import upload_json
+
+def get_exist_aritcle_codes():
+    """
+    Read exist article codes in latest json file
+
+    Returns:
+        list: exists aritcle codes in json file
+    """
+    with open(JSON_PATH + FILE_NAME, "r") as json_file:
+        last_infos = json.load(json_file)
+        aritcle_codes = [info.get('article_code') for info in last_infos]
+    return aritcle_codes
+
 
 def get_article_info_urls(board_name):
     """
     Sends get request to blind and gets valid urls of articles.
-    Filter valid urls by checking data is already in csv file.
+    Filter valid urls by checking data is already in json file.
     
     Args:
-        exist_article_codes(list): article codes already exist in main csv file
+        exist_article_codes(list): article codes already exist in main json file
     
     Return:
-        list: urls of valid articles, not exist in csv file
+        list: urls of valid articles, not exist in json file
     """
     try:
         url = f"{base_url}/kr/topics/{board_name}"
         resp = requests.get(url, headers=headers)
-        assert resp.status_code == 200, "Requset Failed"
+        assert resp.status_code == 200, "Requset Failed check out header or request parameter"
     
         soup = bs(resp.text, 'html.parser')
-        hrefs = [a['href'] for a in soup.select('.article-list-pre .category > a') if a.has_attr('href')]
-        return hrefs
+        scrapped_urls = [a['href'] for a in soup.select('.article-list-pre .category > a') if a.has_attr('href')]
+        article_codes = [href.split("-")[-1] for href in scrapped_urls]
+        #get already existed articles codes
+        exist_article_codes = set(get_exist_aritcle_codes())
+        valid_urls = [url for url, code in zip(scrapped_urls, article_codes) if code not in exist_article_codes]
+        return valid_urls
     
     except Exception as e:
         logger.error(e)
@@ -170,34 +188,43 @@ def parse_article_info(html_text):
 
 
 def create_json(infos):
-    now = datetime.datetime.now()
-    file_name = JSON_PATH + datetime.datetime.strftime(now, "%Y-%m-%d %H:%M") + ".json"
-    with open(file_name, "w") as json_:
-        json.dump(infos, json_, indent=4)
+    # now = datetime.datetime.now()
+    # file_name = JSON_PATH + datetime.datetime.strftime(now, "%Y-%m-%d %H:%M") + ".json"
+    with open(JSON_PATH + FILE_NAME, "w") as json_file:
+        json.dump(infos, json_file, indent=4)
     return
-
 
 async def run():
     """
-    Run scrapping each 10 minutes.
+    Run scrapping and Upload json result to S3
     """
 
     #should change as article code
-    board_name = "자동차"
-    encoded_board_name = requests.utils.quote(board_name)
-    urls = get_article_info_urls(encoded_board_name)
-    infos = await get_all_aritcle(urls)
-    create_json(infos)
-    # update_csv(csv_file, infos)
+    try:
+        board_name = "블라블라"
+        encoded_board_name = requests.utils.quote(board_name)
+        urls = get_article_info_urls(encoded_board_name)
+        infos = await get_all_aritcle(urls)
+        
+        #when new article is morethan 50
+        if len(infos) > 50:
+            create_json(infos)
+            upload_json.upload_json(JSON_PATH + FILE_NAME)
+        
+        else:
+            logger.info("No new articles")
+    
+    except Exception as e:
+        logger.warning(e)
 
 
 if __name__ == '__main__':
     JSON_PATH = "./json/"
+    FILE_NAME = "last_scrapped.json"
     #add your user agent 
     headers = ''
 
     #blind base url
     base_url = "https://www.teamblind.com"
-
     logger = my_logger.create_logger()
     asyncio.run(run())
