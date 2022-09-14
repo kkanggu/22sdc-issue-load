@@ -7,7 +7,7 @@ import pathlib
 import re
 import requests
 import my_logger
-import upload_json
+import control_s3
 
 def get_exist_aritcle_codes():
     """
@@ -210,7 +210,7 @@ async def run():
         #when new article is morethan 50
         if len(infos) > 50:
             create_json(infos)
-            upload_json.upload_json(str(FILE_PATH))
+            control_s3.upload_json(str(FILE_PATH))
         
         else:
             logger.info("Not enough new articles")
