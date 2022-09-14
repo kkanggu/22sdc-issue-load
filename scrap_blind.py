@@ -3,6 +3,7 @@ import asyncio
 from bs4 import BeautifulSoup as bs
 import datetime
 import json
+import pathlib
 import re
 import requests
 import my_logger
@@ -15,7 +16,7 @@ def get_exist_aritcle_codes():
     Returns:
         list: exists aritcle codes in json file
     """
-    with open(JSON_PATH + FILE_NAME, "r") as json_file:
+    with open(FILE_PATH, "r") as json_file:
         last_infos = json.load(json_file)
         aritcle_codes = [info.get('article_code') for info in last_infos]
     return aritcle_codes
@@ -188,11 +189,10 @@ def parse_article_info(html_text):
 
 
 def create_json(infos):
-    # now = datetime.datetime.now()
-    # file_name = JSON_PATH + datetime.datetime.strftime(now, "%Y-%m-%d %H:%M") + ".json"
-    with open(JSON_PATH + FILE_NAME, "w") as json_file:
+    with open(FILE_PATH, "w") as json_file:
         json.dump(infos, json_file, indent=4)
     return
+
 
 async def run():
     """
@@ -209,18 +209,19 @@ async def run():
         #when new article is morethan 50
         if len(infos) > 50:
             create_json(infos)
-            upload_json.upload_json(JSON_PATH + FILE_NAME)
+            upload_json.upload_json(str(FILE_PATH))
         
         else:
-            logger.info("No new articles")
+            logger.info("Not enough new articles")
     
     except Exception as e:
         logger.warning(e)
 
 
 if __name__ == '__main__':
-    JSON_PATH = "./json/"
-    FILE_NAME = "last_scrapped.json"
+    #use pathlib to set path option
+    JSON_PATH = pathlib.Path(__file__).parent.joinpath("./json/")
+    FILE_PATH = JSON_PATH.joinpath("last_scrapped.json")
     #add your user agent 
     headers = ''
 
