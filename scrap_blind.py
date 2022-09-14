@@ -190,6 +190,7 @@ def parse_article_info(html_text):
 
 def create_json(infos):
     with open(FILE_PATH, "w") as json_file:
+        infos = sorted(infos, key=lambda x: x['date'])
         json.dump(infos, json_file, indent=4)
     return
 
