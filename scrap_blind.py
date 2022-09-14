@@ -7,7 +7,7 @@ import pathlib
 import re
 import requests
 import my_logger
-import upload_json
+import control_s3
 
 def get_exist_aritcle_codes():
     """
@@ -190,6 +190,7 @@ def parse_article_info(html_text):
 
 def create_json(infos):
     with open(FILE_PATH, "w") as json_file:
+        infos = sorted(infos, key=lambda x: x['date'])
         json.dump(infos, json_file, indent=4)
     return
 
@@ -209,7 +210,7 @@ async def run():
         #when new article is morethan 50
         if len(infos) > 50:
             create_json(infos)
-            upload_json.upload_json(str(FILE_PATH))
+            control_s3.upload_json(str(FILE_PATH))
         
         else:
             logger.info("Not enough new articles")
