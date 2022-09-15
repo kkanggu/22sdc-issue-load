@@ -1,15 +1,16 @@
 import logging
 import pathlib
-def create_logger():
+def create_logger(name_):
     path = pathlib.Path(__file__).parent
-    logger = logging.getLogger(name='scrap')
+    logger = logging.getLogger(name_)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s:%(module)s:%(levelname)s:%(message)s %(funcName)s', datefmt='%Y-%m-%d %H:%M:%S')
 
     #consol logger
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
+    if not logger.handlers:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
 
     #file logger
     log_file_name = 'log/scrap.log'
@@ -17,8 +18,3 @@ def create_logger():
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     return logger
-
-
-# if __name__ == '__main__':
-#     logger = create_logger()
-#     logger.info("hello")
