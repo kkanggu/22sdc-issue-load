@@ -7,7 +7,6 @@ import pathlib
 import re
 import requests
 import my_logger
-import control_s3
 
 def get_exist_aritcle_codes():
     """
@@ -17,11 +16,17 @@ def get_exist_aritcle_codes():
         list: exists aritcle codes in json file
     """
     aritcle_codes = []
-    with open(FILE_PATH, "r") as json_file:
-        last_infos = json.load(json_file)
-        if last_infos:
-            aritcle_codes = [info.get('article_code') for info in last_infos]
-    return aritcle_codes
+    try:
+        with open(FILE_PATH, "r") as json_file:
+            last_infos = json.load(json_file)
+            if last_infos:
+                aritcle_codes = [info.get('article_code') for info in last_infos]
+    
+    except Exception as e:
+        logger.warning(e)
+    
+    finally:
+        return aritcle_codes
 
 
 def get_article_info_urls(board_name):
@@ -66,7 +71,6 @@ async def get_all_aritcle(article_urls):
     #create tasks to async job
     tasks = [asyncio.create_task(get_article_info(base_url + l)) for l in article_urls]
     infos = await asyncio.gather(*tasks)
-    print(f"article counts: {len(infos)}")
     return infos
 
 
@@ -92,8 +96,12 @@ async def get_article_info(article_url):
             async with session.get(article_url) as resp:
                 assert resp.status == 200, "Requset Failed" #if reponse has error then occur exception
                 html_text = await resp.text()
+                
                 #get parsed data of html text
                 date, name, title, content = parse_article_info(html_text)
+                
+                #If author is 팀 블라인드 then article is advertise or announcemnet.
+                assert name != '팀블라인드', "This article is advertise"
                 
                 #convert date format to yyyy-mm-dd hh-MM
                 foramtted_date = convert_date_format(date)
@@ -128,7 +136,7 @@ def convert_date_format(raw_date):
     #find time amount, unit by regex
     time_amount = ''.join(re.findall('\d', raw_date))
     time_unit = ''.join(re.findall('[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]', raw_date))
-
+    # print(time_amount, time_unit)
     try:
         if time_amount: 
             time_amount = int(time_amount)
@@ -144,6 +152,8 @@ def convert_date_format(raw_date):
                 time_ago = datetime.timedelta(minutes=0)
             elif time_unit == "어제":
                 time_ago = datetime.timedelta(days=1)
+            else:
+                return 
 
         date = datetime.datetime.now() - time_ago
         date = date.strftime("%Y-%m-%d %H: %M")
@@ -191,10 +201,14 @@ def parse_article_info(html_text):
 
 
 def create_json(infos):
-    with open(FILE_PATH, "w") as json_file:
+    try:
         infos = sorted(infos, key=lambda x: x['date'])
-        json.dump(infos, json_file, indent=4)
-    return
+        with open(FILE_PATH, "w") as json_file:
+            json.dump(infos, json_file, indent=4)
+        return
+
+    except Exception as e:
+        logger.warning(e)
 
 
 async def run():
@@ -207,14 +221,14 @@ async def run():
         board_name = "블라블라"
         encoded_board_name = requests.utils.quote(board_name)
         urls = get_article_info_urls(encoded_board_name)
-
-        if len(urls) > 0:
-            infos = await get_all_aritcle(urls)
+        if urls:
+            #drop advertise articles
+            infos = [info for info in await get_all_aritcle(urls) if info]
+            
+            logger.info(f"Counts of new articles : {len(infos)}")
             #when new article is morethan 50
             if len(infos) > 50:
                 create_json(infos)
-                control_s3.upload_json(str(FILE_PATH))
-                control_s3.send_json_to_model()
             
             else:
                 logger.info("Not enough new articles")
@@ -232,5 +246,5 @@ if __name__ == '__main__':
 
     #blind base url
     base_url = "https://www.teamblind.com"
-    logger = my_logger.create_logger()
+    logger = my_logger.create_logger('Scrap')
     asyncio.run(run())
