@@ -57,7 +57,7 @@ def get_article_info_urls(board_name):
         logger.error(e)
 
 
-async def get_all_aritcle(article_urls):
+async def get_all_article(article_urls):
     """
     Sends requests to each article url and get information of each articles.
     
@@ -223,7 +223,7 @@ async def run():
         urls = get_article_info_urls(encoded_board_name)
         if urls:
             #drop advertise articles
-            infos = [info for info in await get_all_aritcle(urls) if info]
+            infos = [info for info in await get_all_article(urls) if info]
             
             logger.info(f"Counts of new articles : {len(infos)}")
             #when new article is morethan 50
