@@ -205,15 +205,17 @@ async def run():
         board_name = "블라블라"
         encoded_board_name = requests.utils.quote(board_name)
         urls = get_article_info_urls(encoded_board_name)
-        infos = await get_all_aritcle(urls)
-        
-        #when new article is morethan 50
-        if len(infos) > 50:
-            create_json(infos)
-            control_s3.upload_json(str(FILE_PATH))
-        
-        else:
-            logger.info("Not enough new articles")
+
+        if len(urls) > 0:
+            infos = await get_all_aritcle(urls)
+            #when new article is morethan 50
+            if len(infos) > 50:
+                create_json(infos)
+                control_s3.upload_json(str(FILE_PATH))
+                control_s3.send_json_to_model()
+            
+            else:
+                logger.info("Not enough new articles")
     
     except Exception as e:
         logger.warning(e)
