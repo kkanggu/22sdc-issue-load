@@ -16,9 +16,11 @@ def get_exist_aritcle_codes():
     Returns:
         list: exists aritcle codes in json file
     """
+    aritcle_codes = []
     with open(FILE_PATH, "r") as json_file:
         last_infos = json.load(json_file)
-        aritcle_codes = [info.get('article_code') for info in last_infos]
+        if last_infos:
+            aritcle_codes = [info.get('article_code') for info in last_infos]
     return aritcle_codes
 
 
@@ -205,15 +207,17 @@ async def run():
         board_name = "블라블라"
         encoded_board_name = requests.utils.quote(board_name)
         urls = get_article_info_urls(encoded_board_name)
-        infos = await get_all_aritcle(urls)
-        
-        #when new article is morethan 50
-        if len(infos) > 50:
-            create_json(infos)
-            control_s3.upload_json(str(FILE_PATH))
-        
-        else:
-            logger.info("Not enough new articles")
+
+        if len(urls) > 0:
+            infos = await get_all_aritcle(urls)
+            #when new article is morethan 50
+            if len(infos) > 50:
+                create_json(infos)
+                control_s3.upload_json(str(FILE_PATH))
+                control_s3.send_json_to_model()
+            
+            else:
+                logger.info("Not enough new articles")
     
     except Exception as e:
         logger.warning(e)
