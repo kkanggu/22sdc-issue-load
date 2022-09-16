@@ -24,9 +24,11 @@ def Kword_save(request):
     key_list = body["keywords"]
     DB_store = database()
     for data in key_list:
-        DB_store.time = time_data
-        DB_store.key_word = data
-        DB_store.save()
+        words = data.split(" ")
+        for word in words:
+            DB_store.time = time_data
+            DB_store.key_word = word
+            DB_store.save()
     return JsonResponse("Success!", safe=False, status=201)
 
 

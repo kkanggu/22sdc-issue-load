@@ -10,5 +10,5 @@ from django.db import models
 
 
 class database(models.Model):
-    key_word = models.CharField(max_length=20, default="")
+    key_word = models.CharField(max_length=20, default="", primary_key=True)
     time = models.DateTimeField()
